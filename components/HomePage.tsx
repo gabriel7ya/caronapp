@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SearchCriteria, Location } from '../types';
 import { CalendarIcon, MapPinIcon } from '../constants';
 import LocationInput from './LocationInput';
-import MapPicker from './MapPicker';
+import MapPicker, { getCurrentBrowserLocation } from './MapPicker';
 
 interface HomePageProps {
   onSearch: (criteria: SearchCriteria) => void;
@@ -17,6 +17,24 @@ const HomePage: React.FC<HomePageProps> = ({ onSearch }) => {
   const [date, setDate] = useState('');
   const [activeMap, setActiveMap] = useState<'origin' | 'destination' | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setOriginText('Obtendo localização atual...');
+    getCurrentBrowserLocation()
+      .then(location => {
+        if (location) {
+          setOrigin(location);
+          setOriginText(location.name);
+        } else {
+          setOriginText('');
+        }
+      })
+      .catch(error => {
+        console.warn("Não foi possível obter a localização: ", error.message);
+        setOriginText(''); // Limpa o texto em caso de erro, permitindo inserção manual.
+      });
+  }, []); // Array de dependências vazio executa apenas na montagem do componente.
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

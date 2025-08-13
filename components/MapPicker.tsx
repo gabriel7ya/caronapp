@@ -12,6 +12,67 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
+/**
+ * Converte coordenadas geográficas em um nome de endereço legível.
+ * @param latlng Objeto LatLng do Leaflet.
+ * @returns O nome do local (display_name) do Nominatim.
+ */
+export const reverseGeocode = async (latlng: LatLng): Promise<string> => {
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}&accept-language=pt-BR`);
+    if (!response.ok) throw new Error("A resposta da rede não foi bem-sucedida");
+    const data = await response.json();
+    if (data && data.display_name) {
+      return data.display_name;
+    }
+    throw new Error('Endereço não encontrado');
+  } catch (error) {
+    console.error("Erro na geocodificação reversa:", error);
+    throw new Error('Não foi possível obter o endereço.');
+  }
+};
+
+/**
+ * Obtém a localização atual do usuário através da API de Geolocalização do navegador.
+ * @returns Uma Promise que resolve com um objeto Location ou é rejeitada com um erro.
+ */
+export const getCurrentBrowserLocation = (): Promise<Location> => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      return reject(new Error('Geolocalização não é suportada por este navegador.'));
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        const latlng = new LatLng(latitude, longitude);
+        try {
+          const name = await reverseGeocode(latlng);
+          resolve({ name, lat: latitude, lng: longitude });
+        } catch (error) {
+          reject(error);
+        }
+      },
+      (error) => {
+        let errorMessage = 'Ocorreu um erro ao obter a localização.';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = "Você negou a permissão para geolocalização.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = "Informações de localização não estão disponíveis.";
+            break;
+          case error.TIMEOUT:
+            errorMessage = "A requisição para obter a localização expirou.";
+            break;
+        }
+        reject(new Error(errorMessage));
+      }
+    );
+  });
+};
+
+
 interface MapPickerProps {
   initialLocation: Location | null;
   onLocationChange: (location: Location) => void;
@@ -59,22 +120,20 @@ const DraggableMarker = ({ position, onPositionChange }: { position: LatLng, onP
 
 
 const MapPicker: React.FC<MapPickerProps> = ({ initialLocation, onLocationChange, onClose }) => {
-  const defaultCenter = new LatLng(initialLocation?.lat || -14.235, initialLocation?.lng || -51.925); // Centro do Brasil
-  const [position, setPosition] = useState<LatLng>(defaultCenter);
+  const defaultCenter = useMemo(() => new LatLng(-14.235, -51.925), []); // Centro do Brasil
+  const [position, setPosition] = useState<LatLng>(initialLocation ? new LatLng(initialLocation.lat, initialLocation.lng) : defaultCenter);
   const [locationName, setLocationName] = useState<string | null>(initialLocation?.name || null);
   const [isGeocoding, setIsGeocoding] = useState(false);
 
-  const reverseGeocode = useCallback(async (latlng: LatLng) => {
+  const fetchAndSetLocationName = useCallback(async (latlng: LatLng) => {
     setIsGeocoding(true);
     setLocationName("Buscando endereço...");
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}&accept-language=pt-BR`);
-      if (!response.ok) throw new Error("Falha na busca");
-      const data = await response.json();
-      setLocationName(data.display_name || 'Endereço não encontrado');
-    } catch (error) {
+      const name = await reverseGeocode(latlng);
+      setLocationName(name);
+    } catch (error: any) {
       console.error("Erro na geocodificação reversa:", error);
-      setLocationName('Não foi possível obter o endereço.');
+      setLocationName(error.message || 'Não foi possível obter o endereço.');
     } finally {
       setIsGeocoding(false);
     }
@@ -82,21 +141,21 @@ const MapPicker: React.FC<MapPickerProps> = ({ initialLocation, onLocationChange
 
   useEffect(() => {
     if (initialLocation) {
-      const newPos = new LatLng(initialLocation.lat, initialLocation.lng)
+      const newPos = new LatLng(initialLocation.lat, initialLocation.lng);
       setPosition(newPos);
       setLocationName(initialLocation.name);
     } else {
-      reverseGeocode(defaultCenter);
+      fetchAndSetLocationName(defaultCenter);
     }
-  }, [initialLocation, reverseGeocode, defaultCenter]);
+  }, [initialLocation, fetchAndSetLocationName, defaultCenter]);
 
   const handlePositionChange = (newLatLng: LatLng) => {
     setPosition(newLatLng);
-    reverseGeocode(newLatLng);
+    fetchAndSetLocationName(newLatLng);
   };
 
   const handleConfirm = () => {
-    if (position && locationName && !isGeocoding) {
+    if (position && locationName && !isGeocoding && locationName !== 'Não foi possível obter o endereço.') {
       onLocationChange({
         name: locationName,
         lat: position.lat,
@@ -130,7 +189,7 @@ const MapPicker: React.FC<MapPickerProps> = ({ initialLocation, onLocationChange
           </div>
           <button
             onClick={handleConfirm}
-            disabled={isGeocoding || !locationName}
+            disabled={isGeocoding || !locationName || locationName === 'Não foi possível obter o endereço.'}
             className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-all disabled:bg-blue-300 disabled:cursor-not-allowed"
           >
             {isGeocoding ? 'Aguarde...' : 'Confirmar Localização'}

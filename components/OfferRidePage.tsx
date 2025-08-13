@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trip, Location } from '../types';
 import LocationInput from './LocationInput';
-import MapPicker from './MapPicker';
+import MapPicker, { getCurrentBrowserLocation } from './MapPicker';
 import { MapPinIcon } from '../constants';
 
 interface OfferRidePageProps {
@@ -18,6 +18,24 @@ const OfferRidePage: React.FC<OfferRidePageProps> = ({ onAddTrip }) => {
   const [seats, setSeats] = useState(1);
   const [price, setPrice] = useState(0);
   const [activeMap, setActiveMap] = useState<'origin' | 'destination' | null>(null);
+
+  useEffect(() => {
+    setOriginText('Obtendo localização atual...');
+    getCurrentBrowserLocation()
+      .then(location => {
+        if (location) {
+          setOrigin(location);
+          setOriginText(location.name);
+        } else {
+          setOriginText('');
+        }
+      })
+      .catch(error => {
+        console.warn("Não foi possível obter a localização: ", error.message);
+        setOriginText(''); // Limpa o texto em caso de erro, permitindo inserção manual.
+      });
+  }, []);
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
