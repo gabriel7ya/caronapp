@@ -1,0 +1,5 @@
+{
+  "name": "CaronApp - Planejador de Viagens",
+  "description": "Um aplicativo web para planejar rotas e compartilhar caronas. Usuários podem oferecer caronas, com ou sem custo, e encontrar viagens agendadas por outros. O pagamento é feito diretamente em dinheiro entre os passageiros e motoristas.",
+  "requestFramePermissions": []
+}
